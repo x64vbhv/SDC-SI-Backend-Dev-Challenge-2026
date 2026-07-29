@@ -2,13 +2,13 @@
   "openapi": "3.0.3",
   "info": {
     "title": "SDC-SI Expense Management System",
-    "description": "Role-based expense tracking and approval backend API",
+    "description": "Role-based expense approval workflow backend. Supports Employee, Manager, and Finance roles with a strict status state machine, fraud detection engine, and monthly budget caps.",
     "version": "1.0.0"
   },
   "servers": [
     {
       "url": "http://localhost:5000/api",
-      "description": "Local development server"
+      "description": "Local development"
     }
   ],
   "components": {
@@ -20,6 +20,12 @@
       }
     },
     "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "message": { "type": "string" }
+        }
+      },
       "User": {
         "type": "object",
         "properties": {
@@ -106,28 +112,35 @@
                 "type": "object",
                 "required": ["email", "password", "first_name", "last_name"],
                 "properties": {
-                  "email": { "type": "string", "format": "email" },
-                  "password": { "type": "string", "minLength": 1 },
-                  "first_name": { "type": "string" },
-                  "last_name": { "type": "string" },
+                  "email": { "type": "string", "format": "email", "example": "emp@test.com" },
+                  "password": { "type": "string", "minLength": 1, "example": "password123" },
+                  "first_name": { "type": "string", "example": "John" },
+                  "last_name": { "type": "string", "example": "Doe" },
                   "role": { "type": "string", "enum": ["employee", "manager", "finance"], "default": "employee" },
-                  "department_id": { "type": "integer", "description": "Required for employee/manager" }
+                  "department_id": { "type": "integer", "description": "Required for employee and manager roles", "example": 1 }
                 }
               }
             }
           }
         },
         "responses": {
-          "201": { "description": "User registered successfully" },
-          "400": { "description": "Validation error" },
-          "409": { "description": "Email already exists" }
+          "201": {
+            "description": "User registered",
+            "content": {
+              "application/json": {
+                "example": { "message": "registered successfully", "user": { "id": 1, "email": "emp@test.com", "role": "employee", "department_id": 1 } }
+              }
+            }
+          },
+          "400": { "description": "Validation error", "content": { "application/json": { "example": { "message": "email, password, first_name and last_name are required" } } } },
+          "409": { "description": "Email already exists", "content": { "application/json": { "example": { "message": "Email already exists" } } } }
         }
       }
     },
     "/auth/login": {
       "post": {
         "tags": ["Authentication"],
-        "summary": "Login and get JWT token",
+        "summary": "Login and get JWT access token",
         "requestBody": {
           "required": true,
           "content": {
@@ -136,8 +149,8 @@
                 "type": "object",
                 "required": ["email", "password"],
                 "properties": {
-                  "email": { "type": "string" },
-                  "password": { "type": "string" }
+                  "email": { "type": "string", "example": "emp.eng@test.com" },
+                  "password": { "type": "string", "example": "password123" }
                 }
               }
             }
@@ -148,28 +161,26 @@
             "description": "Login successful",
             "content": {
               "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "access_token": { "type": "string" },
-                    "user": { "$ref": "#/components/schemas/User" }
-                  }
+                "example": {
+                  "access_token": "eyJhbGciOiJIUzI1NiIs...",
+                  "user": { "id": 2, "email": "emp.eng@test.com", "role": "employee", "department_id": 1 }
                 }
               }
             }
           },
-          "401": { "description": "Invalid credentials" }
+          "401": { "description": "Invalid credentials", "content": { "application/json": { "example": { "message": "Invalid credentials" } } } }
         }
       }
     },
     "/expenses/": {
       "get": {
         "tags": ["Expenses"],
-        "summary": "List expenses with filtering and pagination",
+        "summary": "List expenses with filtering, sorting, and pagination",
+        "description": "Employee sees own. Manager sees department. Finance sees all (with optional department_id filter).",
         "security": [{ "bearerAuth": [] }],
         "parameters": [
-          { "name": "start_date", "in": "query", "schema": { "type": "string" }, "description": "ISO 8601 date" },
-          { "name": "end_date", "in": "query", "schema": { "type": "string" }, "description": "ISO 8601 date" },
+          { "name": "start_date", "in": "query", "schema": { "type": "string" }, "description": "Filter by created_at >= (ISO 8601)", "example": "2026-01-01" },
+          { "name": "end_date", "in": "query", "schema": { "type": "string" }, "description": "Filter by created_at <=", "example": "2026-12-31" },
           { "name": "category", "in": "query", "schema": { "type": "string", "enum": ["travel", "meals", "equipment", "software", "other"] } },
           { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["draft", "submitted", "approved", "rejected"] } },
           { "name": "min_amount", "in": "query", "schema": { "type": "number" } },
@@ -184,12 +195,13 @@
           "200": {
             "description": "Paginated list of expenses",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PaginationEnvelope" } } }
-          }
+          },
+          "401": { "description": "Missing or invalid token" }
         }
       },
       "post": {
         "tags": ["Expenses"],
-        "summary": "Create a new expense",
+        "summary": "Create a new expense (Employee only)",
         "security": [{ "bearerAuth": [] }],
         "requestBody": {
           "required": true,
@@ -199,13 +211,13 @@
                 "type": "object",
                 "required": ["title", "amount", "category"],
                 "properties": {
-                  "title": { "type": "string" },
-                  "amount": { "type": "number" },
-                  "currency": { "type": "string", "default": "USD" },
-                  "category": { "type": "string", "enum": ["travel", "meals", "equipment", "software", "other"] },
+                  "title": { "type": "string", "example": "Laptop stand" },
+                  "amount": { "type": "number", "example": 49.99 },
+                  "currency": { "type": "string", "default": "USD", "example": "USD" },
+                  "category": { "type": "string", "enum": ["travel", "meals", "equipment", "software", "other"], "example": "equipment" },
                   "status": { "type": "string", "enum": ["draft", "submitted"], "default": "draft" },
-                  "receipt_url": { "type": "string" },
-                  "notes": { "type": "string" }
+                  "receipt_url": { "type": "string", "example": "https://receipts.example.com/123.pdf" },
+                  "notes": { "type": "string", "example": "Ergonomic adjustment" }
                 }
               }
             }
@@ -213,8 +225,9 @@
         },
         "responses": {
           "201": { "description": "Expense created" },
+          "400": { "description": "Missing required fields" },
           "403": { "description": "Only employees can create expenses" },
-          "422": { "description": "Validation error" }
+          "422": { "description": "Invalid category or currency" }
         }
       }
     },
@@ -224,16 +237,17 @@
         "summary": "Get expense by ID",
         "security": [{ "bearerAuth": [] }],
         "parameters": [
-          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" }, "example": 1 }
         ],
         "responses": {
-          "200": { "description": "Expense details" },
+          "200": { "description": "Expense details", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Expense" } } } },
+          "401": { "description": "Unauthorized" },
           "404": { "description": "Expense not found" }
         }
       },
       "put": {
         "tags": ["Expenses"],
-        "summary": "Update a draft expense",
+        "summary": "Update a draft expense (Employee only)",
         "security": [{ "bearerAuth": [] }],
         "parameters": [
           { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
@@ -263,52 +277,55 @@
       },
       "delete": {
         "tags": ["Expenses"],
-        "summary": "Delete a draft expense",
+        "summary": "Delete a draft expense (Employee only)",
         "security": [{ "bearerAuth": [] }],
         "parameters": [
           { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
         ],
         "responses": {
-          "204": { "description": "Deleted" },
+          "204": { "description": "Deleted, no content" },
           "403": { "description": "Only employees can delete" },
-          "422": { "description": "Not a draft" }
+          "422": { "description": "Only draft expenses can be deleted" }
         }
       }
     },
     "/expenses/{id}/submit": {
       "post": {
-        "tags": ["Expenses", "Workflow"],
-        "summary": "Submit a draft expense for approval",
+        "tags": ["Workflow"],
+        "summary": "Submit a draft expense for approval (Employee only)",
+        "description": "Transitions status from draft to submitted. Auto-triggers risk analysis.",
         "security": [{ "bearerAuth": [] }],
         "parameters": [
           { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
         ],
         "responses": {
-          "200": { "description": "Expense submitted" },
+          "200": { "description": "Expense submitted (includes risk analysis results)" },
           "403": { "description": "Only employees can submit" },
-          "422": { "description": "Invalid transition" }
+          "422": { "description": "Only draft expenses can be submitted" }
         }
       }
     },
     "/expenses/{id}/approve": {
       "post": {
-        "tags": ["Expenses", "Workflow"],
-        "summary": "Approve a submitted expense",
+        "tags": ["Workflow"],
+        "summary": "Approve a submitted expense (Manager only)",
+        "description": "Transitions status from submitted to approved. Updates department budget. Returns warning if over budget.",
         "security": [{ "bearerAuth": [] }],
         "parameters": [
           { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
         ],
         "responses": {
-          "200": { "description": "Expense approved (may include budget warning)" },
+          "200": { "description": "Expense approved (may include warning field if over budget)" },
           "403": { "description": "Only managers can approve" },
-          "422": { "description": "Invalid transition or self-approval" }
+          "422": { "description": "Invalid transition, self-approval, or not your department" }
         }
       }
     },
     "/expenses/{id}/reject": {
       "post": {
-        "tags": ["Expenses", "Workflow"],
-        "summary": "Reject a submitted expense",
+        "tags": ["Workflow"],
+        "summary": "Reject a submitted expense (Manager only)",
+        "description": "Transitions from submitted to rejected. Requires a rejection_reason.",
         "security": [{ "bearerAuth": [] }],
         "parameters": [
           { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
@@ -321,7 +338,7 @@
                 "type": "object",
                 "required": ["rejection_reason"],
                 "properties": {
-                  "rejection_reason": { "type": "string" }
+                  "rejection_reason": { "type": "string", "example": "Receipt is missing" }
                 }
               }
             }
@@ -331,14 +348,15 @@
           "200": { "description": "Expense rejected" },
           "400": { "description": "rejection_reason is required" },
           "403": { "description": "Only managers can reject" },
-          "422": { "description": "Invalid transition" }
+          "422": { "description": "Invalid transition, self-rejection, or not your department" }
         }
       }
     },
     "/expenses/{id}/reopen": {
       "post": {
-        "tags": ["Expenses", "Workflow"],
-        "summary": "Reopen a rejected expense back to draft",
+        "tags": ["Workflow"],
+        "summary": "Reopen a rejected expense back to draft (Employee only)",
+        "description": "Transitions from rejected to draft. Clears rejection_reason.",
         "security": [{ "bearerAuth": [] }],
         "parameters": [
           { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
@@ -350,10 +368,31 @@
         }
       }
     },
+    "/expenses/flagged": {
+      "get": {
+        "tags": ["Risk Analysis"],
+        "summary": "List flagged expenses by risk threshold (Manager/Finance only)",
+        "description": "Managers see only their own department's flagged expenses. Finance sees all.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "min_score", "in": "query", "schema": { "type": "integer", "default": 50 }, "description": "Minimum risk score threshold" },
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20, "maximum": 100 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of flagged expenses",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PaginationEnvelope" } } }
+          },
+          "403": { "description": "Manager or Finance only" }
+        }
+      }
+    },
     "/expenses/{id}/analyze": {
       "post": {
         "tags": ["Risk Analysis"],
-        "summary": "Re-run risk analysis on an expense",
+        "summary": "Re-run risk analysis on an expense (Manager/Finance only)",
+        "description": "Runs all 5 fraud detection rules and updates risk_score, risk_level, risk_reasons, and analyzed_at.",
         "security": [{ "bearerAuth": [] }],
         "parameters": [
           { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
@@ -363,7 +402,8 @@
             "description": "Risk analysis results",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/RiskBreakdown" }
+                "schema": { "$ref": "#/components/schemas/RiskBreakdown" },
+                "example": { "risk_score": 55, "risk_level": "high", "risk_reasons": ["3 small equipment expenses today totalling $2425.00", "$2000 is 26.7x their usual (avg $75)", "Round number ($2000)"], "analyzed_at": "2026-07-29T18:07:43.698235" }
               }
             }
           },
@@ -375,7 +415,8 @@
     "/expenses/{id}/risk": {
       "get": {
         "tags": ["Risk Analysis"],
-        "summary": "Get risk breakdown for an expense",
+        "summary": "Get risk breakdown for an expense (Manager/Finance only)",
+        "description": "Returns the current risk analysis results without re-running the analysis.",
         "security": [{ "bearerAuth": [] }],
         "parameters": [
           { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
@@ -383,55 +424,30 @@
         "responses": {
           "200": {
             "description": "Risk breakdown",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RiskBreakdown" }
-              }
-            }
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RiskBreakdown" } } }
           },
           "403": { "description": "Manager or Finance only" },
           "404": { "description": "Expense not found" }
         }
       }
     },
-    "/expenses/flagged": {
-      "get": {
-        "tags": ["Risk Analysis"],
-        "summary": "List flagged expenses by risk threshold",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [
-          { "name": "min_score", "in": "query", "schema": { "type": "integer", "default": 50 } },
-          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
-          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20, "maximum": 100 } }
-        ],
-        "responses": {
-          "200": {
-            "description": "Paginated list of flagged expenses",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/PaginationEnvelope" }
-              }
-            }
-          },
-          "403": { "description": "Manager or Finance only" }
-        }
-      }
-    },
     "/budgets/department": {
       "get": {
         "tags": ["Budgets"],
-        "summary": "Get monthly budget info for a department",
+        "summary": "Get monthly budget info (Manager/Finance only)",
+        "description": "Finance requires department_id. Manager auto-scoped to their own department.",
         "security": [{ "bearerAuth": [] }],
         "parameters": [
-          { "name": "department_id", "in": "query", "schema": { "type": "integer" }, "description": "Required for Finance, auto for Manager" },
-          { "name": "month", "in": "query", "schema": { "type": "string" }, "description": "YYYY-MM format" }
+          { "name": "department_id", "in": "query", "schema": { "type": "integer" }, "description": "Required for Finance, ignored for Manager" },
+          { "name": "month", "in": "query", "schema": { "type": "string" }, "description": "YYYY-MM format (defaults to current month)", "example": "2026-07" }
         ],
         "responses": {
           "200": {
             "description": "Budget information",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/BudgetInfo" }
+                "schema": { "$ref": "#/components/schemas/BudgetInfo" },
+                "example": { "budget": 50000.0, "spent": 1250.0, "remaining": 48750.0, "over_budget": false }
               }
             }
           },
@@ -453,7 +469,11 @@
                 "schema": {
                   "type": "array",
                   "items": { "$ref": "#/components/schemas/Department" }
-                }
+                },
+                "example": [
+                  { "id": 1, "name": "Engineering", "monthly_budget": 50000.0, "created_at": "2026-07-29T...", "updated_at": "2026-07-29T..." },
+                  { "id": 2, "name": "Marketing", "monthly_budget": 30000.0, "created_at": "2026-07-29T...", "updated_at": "2026-07-29T..." }
+                ]
               }
             }
           }
@@ -461,7 +481,7 @@
       },
       "post": {
         "tags": ["Departments"],
-        "summary": "Create a new department (Finance only)",
+        "summary": "Create a department (Finance only)",
         "security": [{ "bearerAuth": [] }],
         "requestBody": {
           "required": true,
@@ -471,8 +491,8 @@
                 "type": "object",
                 "required": ["name"],
                 "properties": {
-                  "name": { "type": "string" },
-                  "monthly_budget": { "type": "number" }
+                  "name": { "type": "string", "example": "Engineering" },
+                  "monthly_budget": { "type": "number", "example": 50000.0 }
                 }
               }
             }
