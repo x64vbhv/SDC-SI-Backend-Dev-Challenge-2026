@@ -63,3 +63,14 @@ coverage.xml
 *.swp
 
 instance/
+
+# macOS
+.DS_Store
+
+# Database files
+*.db
+*.sqlite
+
+# Archive
+Archive.zip
+*.zip

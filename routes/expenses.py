@@ -171,7 +171,7 @@ def get_flagged_expenses():
     page = request.args.get('page', 1, type=int)
     limit = min(request.args.get('limit', 20, type=int), 100)
 
-    result = RiskService.get_flagged(min_score, page, limit)
+    result = RiskService.get_flagged(min_score, page, limit, user)
     return jsonify(result), 200
 
 @expense_bp.route('/<int:id>/analyze', methods=['POST'])
@@ -182,7 +182,7 @@ def analyze_expense(id):
     if not user or user.role not in ('manager', 'finance'):
         return jsonify({"message": "Forbidden"}), 403
 
-    result, error = RiskService.analyze(id)
+    result, error = RiskService.analyze(id, user)
     if error:
         return jsonify({"message": error}), 404
     return jsonify(result), 200
@@ -195,7 +195,7 @@ def get_risk_breakdown(id):
     if not user or user.role not in ('manager', 'finance'):
         return jsonify({"message": "Forbidden"}), 403
 
-    result, error = RiskService.get_breakdown(id)
+    result, error = RiskService.get_breakdown(id, user)
     if error:
         return jsonify({"message": error}), 404
     return jsonify(result), 200

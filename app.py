@@ -8,6 +8,8 @@ from routes.auth import auth_bp
 from routes.expenses import expense_bp
 from routes.budget import budget_bp
 from routes.departments import department_bp
+from flask_swagger_ui import get_swaggerui_blueprint
+import json
 
 app = Flask(__name__)
 app.config.from_object(Flask_Config)
@@ -18,10 +20,21 @@ db.init_app(app)
 limiter.init_app(app)
 jwt.init_app(app)
 
+API_URL = '/swagger.json'
+
+swaggerui_blueprint = get_swaggerui_blueprint(
+    "/docs",
+    API_URL,
+    config={
+        'app_name': "Expense Management System"
+    }
+)
+
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
 app.register_blueprint(expense_bp, url_prefix='/api/expenses')
 app.register_blueprint(budget_bp, url_prefix='/api/budgets')
 app.register_blueprint(department_bp, url_prefix='/api/departments')
+app.register_blueprint(swaggerui_blueprint, url_prefix="/docs")
 
 with app.app_context():
     db.create_all()
@@ -29,6 +42,11 @@ with app.app_context():
 @app.route('/')
 def index():
     return "Expense Management System for Wildcard Round of SDC-SI, AKGEC"
+
+@app.route('/swagger.json')
+def serve_swagger_json():
+    with open('swagger.json', 'r') as f:
+        return jsonify(json.load(f))
 
 @app.errorhandler(Exception)
 def handle_global_exception(e):

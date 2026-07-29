@@ -2,7 +2,6 @@ from datetime import datetime, timedelta
 from difflib import SequenceMatcher
 from models import Expense
 from ext import db
-from services.ExpenseService import ExpenseService
 
 # src: https://safebooks.ai/resources/fraud-detection/expense-fraud-and-errors-how-to-detect-and-prevent-financial-loss/
 # https://www.emburse.com/resources/complete-guide-to-expense-fraud-detection
@@ -110,10 +109,12 @@ class RiskService:
         return [], 0
 
     @staticmethod
-    def analyze(exp_id):
+    def analyze(exp_id, user=None):
         exp = Expense.query.get(exp_id)
         if not exp:
             return None, "Expense not found"
+        if user and user.role == 'manager' and exp.department_id != user.department_id:
+            return None, "Not authorized"
 
         amt = float(exp.amount)
         reasons = []
@@ -157,14 +158,17 @@ class RiskService:
         }, None
 
     @staticmethod
-    def get_flagged(min_score=50, page=1, limit=20):
-        pg = Expense.query.filter(
-            Expense.risk_score >= min_score
-        ).paginate(page=page, per_page=limit, error_out=False)
+    def get_flagged(min_score=50, page=1, limit=20, user=None):
+        from services.ExpenseService import ExpenseService as ES
+
+        query = Expense.query.filter(Expense.risk_score >= min_score)
+        if user and user.role == 'manager':
+            query = query.filter(Expense.department_id == user.department_id)
+        pg = query.paginate(page=page, per_page=limit, error_out=False)
 
         data = []
         for item in pg.items:
-            data.append(ExpenseService._to_dict(item))
+            data.append(ES._to_dict(item))
 
         return {
             'total': pg.total,
@@ -174,10 +178,12 @@ class RiskService:
         }
 
     @staticmethod
-    def get_breakdown(exp_id):
+    def get_breakdown(exp_id, user=None):
         exp = Expense.query.get(exp_id)
         if not exp:
             return None, "Expense not found"
+        if user and user.role == 'manager' and exp.department_id != user.department_id:
+            return None, "Not authorized"
 
         return {
             'risk_score': exp.risk_score,
