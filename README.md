@@ -57,7 +57,7 @@ Interactive API docs at [http://localhost:5000/docs](http://localhost:5000/docs)
 ## Features Implemented
 
 ### 1. Authentication & Authorization
-JWT-based auth with three strictly-enforced roles. Passwords hashed via Werkzeug. Role and department checks happen server-side on every protected route — never trusts client-supplied role data.
+JWT-based auth with register, login, and logout (token blocklist). Three strictly-enforced roles. Passwords hashed via Werkzeug. Role and department checks happen server-side on every protected route — never trusts client-supplied role data.
 
 - **Employee** — create, edit (if draft), delete (if draft), view own expenses
 - **Manager** — approve/reject within own department, cannot self-approve, view department expenses
