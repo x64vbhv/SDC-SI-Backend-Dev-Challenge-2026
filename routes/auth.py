@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import create_access_token
-from ext import limiter
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt
+from ext import db, limiter
+from models import TokenBlocklist
 from services.AuthService import AuthService
 
 auth_bp = Blueprint('auth', __name__)
@@ -66,3 +67,13 @@ def login():
             "department_id": user.department_id
         }
     }), 200
+
+
+@auth_bp.route('/logout', methods=['POST'])
+@jwt_required()
+@limiter.limit("10 per minute")
+def logout():
+    jti = get_jwt()['jti']
+    db.session.add(TokenBlocklist(jti=jti))
+    db.session.commit()
+    return jsonify({"message": "logged out successfully"}), 200

@@ -172,6 +172,18 @@
         }
       }
     },
+    "/auth/logout": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Logout and revoke current JWT token",
+        "description": "Adds the token's jti to the blocklist. Subsequent requests with the same token will be rejected.",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Logged out", "content": { "application/json": { "example": { "message": "logged out successfully" } } } },
+          "401": { "description": "Invalid or expired token" }
+        }
+      }
+    },
     "/expenses/": {
       "get": {
         "tags": ["Expenses"],
