@@ -172,6 +172,7 @@
               }
             }
           },
+           "400": { "description": "Missing email or password", "content": { "application/json": { "example": { "message": "email and password are required" } } } },
           "401": { "description": "Invalid credentials", "content": { "application/json": { "example": { "message": "Invalid credentials" } } } }
         }
       }
