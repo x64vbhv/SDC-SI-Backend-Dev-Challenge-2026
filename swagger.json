@@ -7,6 +7,10 @@
   },
   "servers": [
     {
+      "url": "https://sdc-si-backend-dev-challenge-2026.onrender.com/api",
+      "description": "Production (Render)"
+    },
+    {
       "url": "http://localhost:5000/api",
       "description": "Local development"
     }
