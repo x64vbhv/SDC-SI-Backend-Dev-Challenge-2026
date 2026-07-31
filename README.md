@@ -4,6 +4,8 @@
 
 A role-based expense approval backend that enforces strict access control, a well-defined approval state machine, and includes optional fraud detection and budget tracking features.
 
+**Live API:** [https://sdc-si-backend-dev-challenge-2026.onrender.com](https://sdc-si-backend-dev-challenge-2026.onrender.com) — interactive docs at [/docs](https://sdc-si-backend-dev-challenge-2026.onrender.com/docs)
+
 ---
 
 ## Tech Stack
@@ -22,7 +24,7 @@ python seed.py          # seed sample data
 python app.py           # starts on http://localhost:5000
 ```
 
-Interactive API docs at [http://localhost:5000/docs](http://localhost:5000/docs) (Swagger UI).
+Interactive API docs at [http://localhost:5000/docs](http://localhost:5000/docs) (Swagger UI). The deployed instance lives at [https://sdc-si-backend-dev-challenge-2026.onrender.com](https://sdc-si-backend-dev-challenge-2026.onrender.com) (docs at [/docs](https://sdc-si-backend-dev-challenge-2026.onrender.com/docs)).
 
 ---
 
